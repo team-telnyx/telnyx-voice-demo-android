@@ -24,6 +24,7 @@ class TwilioService(private val context: Context) {
     val state: StateFlow<TwilioCallState> = _state.asStateFlow()
 
     private var accessToken: String? = null
+    private var registeredFcmToken: String? = null
     private var activeCall: Call? = null
     private var pendingCallInvite: CallInvite? = null
 
@@ -37,8 +38,9 @@ class TwilioService(private val context: Context) {
             fcmToken,
             object : RegistrationListener {
                 override fun onRegistered(accessToken: String, fcmToken: String) {
-                    Timber.d("Twilio registered successfully")
-                    _state.value = TwilioCallState.Registered
+                    Timber.d("Twilio registered successfully with FCM token: ${fcmToken.take(20)}...")
+                    registeredFcmToken = fcmToken
+                    _state.value = TwilioCallState.Registered(fcmToken)
                 }
 
                 override fun onError(
@@ -60,7 +62,7 @@ class TwilioService(private val context: Context) {
         }
 
         val connectOptions = ConnectOptions.Builder(token)
-            .params(mapOf("to" to to))
+            .params(mapOf("To" to to))
             .build()
 
         activeCall = Voice.connect(context, connectOptions, callListener)
@@ -80,7 +82,7 @@ class TwilioService(private val context: Context) {
         pendingCallInvite = callInvite
 
         val callInfo = CallInfo(
-            callId = callInvite.callSid ?: "unknown",
+            callId = callInvite.callSid,
             provider = Provider.TWILIO,
             remoteNumber = callInvite.from ?: "Unknown",
             remoteName = callInvite.from,
@@ -94,7 +96,8 @@ class TwilioService(private val context: Context) {
     fun handleCancelledCallInvite(cancelledCallInvite: CancelledCallInvite) {
         if (pendingCallInvite?.callSid == cancelledCallInvite.callSid) {
             pendingCallInvite = null
-            _state.value = TwilioCallState.Registered
+            val fcmToken = registeredFcmToken ?: ""
+            _state.value = TwilioCallState.Registered(fcmToken)
             Timber.d("Twilio call invite cancelled: ${cancelledCallInvite.callSid}")
         }
     }
@@ -132,14 +135,16 @@ class TwilioService(private val context: Context) {
 
         callInvite.reject(context)
         pendingCallInvite = null
-        _state.value = TwilioCallState.Registered
+        val fcmToken = registeredFcmToken ?: ""
+        _state.value = TwilioCallState.Registered(fcmToken)
         Timber.d("Twilio call rejected: ${callInvite.callSid}")
     }
 
     fun endCall() {
         activeCall?.disconnect()
         activeCall = null
-        _state.value = TwilioCallState.Registered
+        val fcmToken = registeredFcmToken ?: ""
+        _state.value = TwilioCallState.Registered(fcmToken)
         Timber.d("Twilio call ended")
     }
 
@@ -171,7 +176,8 @@ class TwilioService(private val context: Context) {
                 Timber.e("Disconnect reason: ${exception.message}")
             }
             activeCall = null
-            _state.value = TwilioCallState.Registered
+            val fcmToken = registeredFcmToken ?: ""
+            _state.value = TwilioCallState.Registered(fcmToken)
         }
 
         override fun onConnectFailure(call: Call, exception: CallException) {

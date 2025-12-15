@@ -3,40 +3,55 @@ package com.telnyx.voice.demo
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
+import com.telnyx.voice.demo.util.SettingsStorage
 import com.telnyx.webrtc.sdk.model.PushMetaData
 import com.twilio.voice.CallInvite
 import com.twilio.voice.CancelledCallInvite
 import com.twilio.voice.MessageListener
 import com.twilio.voice.Voice
+import timber.log.Timber
 
 class HybridFirebaseMessagingService : FirebaseMessagingService() {
 
     private val notificationManager by lazy {
-        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        getSystemService(NOTIFICATION_SERVICE) as NotificationManager
     }
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "Refreshed token: $token")
-        // Notify CallManager or save token
-        // For now we just log it, as registration happens in UI/CallManager
+        Timber.tag(TAG).d("Refreshed token: $token")
+
+        // Check if token has changed and Twilio needs re-registration
+        val previousToken = SettingsStorage.getPushToken(this)
+        val tokenChanged = previousToken != null && previousToken != token
+
+        // Save new token
+        SettingsStorage.savePushToken(this, token)
+
+        // Log if Twilio needs re-registration
+        if (tokenChanged && SettingsStorage.needsTwilioReregistration(this, token)) {
+            Timber.tag(TAG).w("FCM token changed - Twilio re-registration required on next app launch")
+        }
+
+        // Update VoiceApplication
+        (application as? VoiceApplication)?.let {
+            it.fcmToken = token
+        }
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        Log.d(TAG, "From: ${remoteMessage.from}")
+        Timber.tag(TAG).d("From: ${remoteMessage.from}")
 
         // Check if message contains data payload
         if (remoteMessage.data.isNotEmpty()) {
-            Log.d(TAG, "Message data payload: ${remoteMessage.data}")
+            Timber.tag(TAG).d("Message data payload: ${remoteMessage.data}")
 
             // Try Twilio
             val handledByTwilio =
@@ -45,7 +60,8 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
                             remoteMessage.data,
                             object : MessageListener {
                                 override fun onCallInvite(callInvite: CallInvite) {
-                                    Log.d(TAG, "Twilio Call Invite Received: ${callInvite.callSid}")
+                                    Timber.tag(TAG)
+                                        .d("Twilio Call Invite Received: ${callInvite.callSid}")
                                     handleTwilioCallInvite(callInvite)
                                 }
 
@@ -53,29 +69,31 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
                                         cancelledCallInvite: CancelledCallInvite,
                                         callException: com.twilio.voice.CallException?
                                 ) {
-                                    Log.d(TAG, "Twilio Call Invite Cancelled: ${cancelledCallInvite.callSid}")
+                                    Timber.tag(TAG)
+                                        .d("Twilio Call Invite Cancelled: ${cancelledCallInvite.callSid}")
                                     handleTwilioCancelledCallInvite(cancelledCallInvite)
                                 }
                             }
                     )
 
             if (handledByTwilio) {
-                Log.d(TAG, "Message handled by Twilio")
+                Timber.tag(TAG).d("Message handled by Twilio")
             } else {
-                Log.d(TAG, "Message not handled by Twilio, trying Telnyx")
+                Timber.tag(TAG).d("Message not handled by Twilio, trying Telnyx")
 
                 try {
                     val metadata = remoteMessage.data["metadata"]
                     if (metadata != null) {
                         val telnyxPushMetadata = Gson().fromJson(metadata, PushMetaData::class.java)
                         telnyxPushMetadata?.let {
-                            Log.d(TAG, "Telnyx Push Received: callId=${it.callId}, caller=${it.callerName}")
+                            Timber.tag(TAG)
+                                .d("Telnyx Push Received: callId=${it.callId}, caller=${it.callerName}")
                             handleTelnyxPush(it)
                             return
                         }
                     }
                 } catch (e: JsonSyntaxException) {
-                    Log.e(TAG, "Error parsing push metadata JSON", e)
+                    Timber.tag(TAG).e(e, "Error parsing push metadata JSON")
                 }
             }
         }
@@ -87,7 +105,7 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
 
         // Show notification
         showIncomingCallNotification(
-            callId = callInvite.callSid ?: "unknown",
+            callId = callInvite.callSid,
             provider = "TWILIO",
             callerName = callInvite.from ?: "Unknown",
             callerNumber = callInvite.from ?: "Unknown"
@@ -108,10 +126,10 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
 
         // Show notification
         showIncomingCallNotification(
-            callId = metadata.callId?.toString() ?: "unknown",
+            callId = metadata.callId,
             provider = "TELNYX",
-            callerName = metadata.callerName ?: "Unknown",
-            callerNumber = metadata.callerNumber ?: "Unknown"
+            callerName = metadata.callerName,
+            callerNumber = metadata.callerNumber
         )
     }
 

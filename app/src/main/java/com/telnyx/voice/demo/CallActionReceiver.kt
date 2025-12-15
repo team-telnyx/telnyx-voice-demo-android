@@ -1,5 +1,6 @@
 package com.telnyx.voice.demo
 
+import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -12,15 +13,29 @@ class CallActionReceiver : BroadcastReceiver() {
         val provider = intent.getStringExtra(EXTRA_PROVIDER) ?: return
 
         val app = context.applicationContext as VoiceApplication
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         when (intent.action) {
             ACTION_ANSWER_CALL -> {
                 Timber.d("Answer call action: provider=$provider, callId=$callId")
                 // Answer call via service
                 when (provider) {
-                    "TELNYX" -> app.telnyxService.answerCall()
+                    "TELNYX" -> {
+                        // Check if this is from push notification
+                        // (If app was backgrounded, we need push-based answer)
+                        if (app.telnyxService.hasPendingPushMetadata()) {
+                            app.telnyxService.answerFromPush()
+                        } else {
+                            // Regular answer (socket already connected)
+                            app.telnyxService.answerCall()
+                        }
+                    }
                     "TWILIO" -> app.twilioService.acceptIncomingCall()
                 }
+
+                // Dismiss notification
+                notificationManager.cancel(callId.hashCode())
+                Timber.d("Notification dismissed for answered call: $callId")
 
                 // Launch app to foreground
                 val launchIntent = Intent(context, MainActivity::class.java).apply {
@@ -32,9 +47,21 @@ class CallActionReceiver : BroadcastReceiver() {
             ACTION_DECLINE_CALL -> {
                 Timber.d("Decline call action: provider=$provider, callId=$callId")
                 when (provider) {
-                    "TELNYX" -> app.telnyxService.endCall()
+                    "TELNYX" -> {
+                        // Check if this is from push notification
+                        if (app.telnyxService.hasPendingPushMetadata()) {
+                            app.telnyxService.declineFromPush()
+                        } else {
+                            // Regular decline (socket already connected)
+                            app.telnyxService.endCall()
+                        }
+                    }
                     "TWILIO" -> app.twilioService.rejectIncomingCall()
                 }
+
+                // Dismiss notification
+                notificationManager.cancel(callId.hashCode())
+                Timber.d("Notification dismissed for declined call: $callId")
             }
         }
     }

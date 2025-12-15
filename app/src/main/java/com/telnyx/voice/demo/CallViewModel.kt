@@ -1,13 +1,24 @@
 package com.telnyx.voice.demo
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import androidx.core.app.NotificationCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.telnyx.voice.demo.models.CallInfo
 import com.telnyx.voice.demo.models.CallState
 import com.telnyx.voice.demo.models.Provider
+import com.telnyx.voice.demo.models.CallUIState
+import com.telnyx.voice.demo.models.SocketConnectionState
 import com.telnyx.voice.logic.models.TelnyxCallState
 import com.telnyx.voice.logic.service.TelnyxService
+import com.telnyx.voice.demo.network.RetrofitClient
+import com.telnyx.voice.demo.network.TokenRequest
 import com.twilio.voice.logic.models.TwilioCallState
 import com.twilio.voice.logic.service.TwilioService
 import kotlinx.coroutines.Job
@@ -27,8 +38,38 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
     private val _callState = MutableStateFlow<CallState>(CallState.Idle)
     val callState: StateFlow<CallState> = _callState.asStateFlow()
 
+    private val _tokenFetchState = MutableStateFlow<TokenFetchState>(TokenFetchState.Idle)
+    val tokenFetchState: StateFlow<TokenFetchState> = _tokenFetchState.asStateFlow()
+
+    // New iOS-aligned states
+    private val _callUIState = MutableStateFlow<CallUIState>(CallUIState.Idle)
+    val callUIState: StateFlow<CallUIState> = _callUIState.asStateFlow()
+
+    private val _socketState = MutableStateFlow(SocketConnectionState.DISCONNECTED)
+    val socketState: StateFlow<SocketConnectionState> = _socketState.asStateFlow()
+
+    private val _isMuted = MutableStateFlow(false)
+    val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
+
+    private val _isSpeakerOn = MutableStateFlow(false)
+    val isSpeakerOn: StateFlow<Boolean> = _isSpeakerOn.asStateFlow()
+
+    private val _isOnHold = MutableStateFlow(false)
+    val isOnHold: StateFlow<Boolean> = _isOnHold.asStateFlow()
+
     private var callDurationJob: Job? = null
     private var currentProvider: Provider? = null
+    private var incomingCallId: String? = null
+
+    private val notificationManager: NotificationManager =
+        application.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    sealed class TokenFetchState {
+        object Idle : TokenFetchState()
+        object Loading : TokenFetchState()
+        data class Success(val token: String, val identity: String) : TokenFetchState()
+        data class Error(val message: String) : TokenFetchState()
+    }
 
     init {
         observeTelnyxState()
@@ -46,6 +87,87 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
 
     fun registerTwilio(accessToken: String, fcmToken: String) {
         twilioService.register(accessToken, fcmToken)
+    }
+
+    fun fetchTwilioToken(identity: String, fcmToken: String) {
+        viewModelScope.launch {
+            _tokenFetchState.value = TokenFetchState.Loading
+            try {
+                val response = RetrofitClient.twilioApi.getAccessToken(
+                    TokenRequest(identity = identity, deviceToken = fcmToken)
+                )
+
+                if (response.isSuccessful) {
+                    val tokenResponse = response.body()
+                    if (tokenResponse != null) {
+                        _tokenFetchState.value = TokenFetchState.Success(
+                            token = tokenResponse.token,
+                            identity = tokenResponse.identity
+                        )
+                        Timber.d("Token fetched successfully for identity: ${tokenResponse.identity}")
+                    } else {
+                        _tokenFetchState.value = TokenFetchState.Error("Empty response from server")
+                        Timber.e("Token fetch failed: empty response body")
+                    }
+                } else {
+                    _tokenFetchState.value = TokenFetchState.Error(
+                        "Failed to fetch token: ${response.code()} ${response.message()}"
+                    )
+                    Timber.e("Token fetch failed: ${response.code()} ${response.message()}")
+                }
+            } catch (e: Exception) {
+                _tokenFetchState.value = TokenFetchState.Error("Network error: ${e.message}")
+                Timber.e(e, "Token fetch error")
+            }
+        }
+    }
+
+    fun clearTokenFetchState() {
+        _tokenFetchState.value = TokenFetchState.Idle
+    }
+
+    // New iOS-aligned methods
+    fun connectAll() {
+        // Both services connect automatically for incoming push notifications
+        // Active provider is determined by user selection
+        Timber.d("Connecting all services")
+        _socketState.value = SocketConnectionState.CONNECTING
+    }
+
+    fun disconnectAll() {
+        telnyxService.disconnect()
+        twilioService.unregister()
+        _socketState.value = SocketConnectionState.DISCONNECTED
+        _callUIState.value = CallUIState.Idle
+    }
+
+    fun toggleMute() {
+        _isMuted.value = !_isMuted.value
+        // TODO: Implement actual mute toggle in services
+        Timber.d("Mute toggled: ${_isMuted.value}")
+    }
+
+    fun toggleSpeaker() {
+        _isSpeakerOn.value = !_isSpeakerOn.value
+        // TODO: Implement actual speaker toggle in services
+        Timber.d("Speaker toggled: ${_isSpeakerOn.value}")
+    }
+
+    fun toggleHold() {
+        _isOnHold.value = !_isOnHold.value
+        if (_isOnHold.value) {
+            val currentState = _callUIState.value
+            if (currentState is CallUIState.Active) {
+                _callUIState.value = CallUIState.Held(currentState.callInfo)
+            }
+        } else {
+            val currentState = _callUIState.value
+            if (currentState is CallUIState.Held) {
+                _callUIState.value = CallUIState.Active(currentState.callInfo)
+            }
+        }
+        // TODO: Implement actual hold toggle in services
+        Timber.d("Hold toggled: ${_isOnHold.value}")
     }
 
     // Call control methods
@@ -70,9 +192,14 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
             Provider.TWILIO -> twilioService.acceptIncomingCall()
             null -> Timber.e("Cannot answer call: no active provider")
         }
+        // Dismiss notification if there's an incoming call
+        dismissIncomingCallNotification()
     }
 
     fun hangupCall() {
+        // Dismiss notification if there's an incoming call (when rejecting)
+        dismissIncomingCallNotification()
+
         when (currentProvider) {
             Provider.TELNYX -> telnyxService.endCall()
             Provider.TWILIO -> twilioService.endCall()
@@ -110,6 +237,9 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
             val appCallInfo = mapTelnyxCallInfo(telnyxState.callInfo)
             currentProvider = Provider.TELNYX
             _callState.value = CallState.Active(appCallInfo, 0)
+            _callUIState.value = CallUIState.Active(appCallInfo)
+            _socketState.value = SocketConnectionState.READY
+            Timber.d("✅ CallViewModel: Telnyx call is ACTIVE, callId=${appCallInfo.callId}, remote=${appCallInfo.remoteNumber}")
             startCallDurationTimer(appCallInfo)
             return
         }
@@ -118,6 +248,8 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
             val appCallInfo = mapTwilioCallInfo(twilioState.callInfo)
             currentProvider = Provider.TWILIO
             _callState.value = CallState.Active(appCallInfo, 0)
+            _callUIState.value = CallUIState.Active(appCallInfo)
+            _socketState.value = SocketConnectionState.READY
             startCallDurationTimer(appCallInfo)
             return
         }
@@ -126,14 +258,24 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
         if (telnyxState is TelnyxCallState.IncomingCall) {
             val appCallInfo = mapTelnyxCallInfo(telnyxState.callInfo)
             currentProvider = Provider.TELNYX
+            incomingCallId = appCallInfo.callId
             _callState.value = CallState.IncomingCall(appCallInfo)
+            _callUIState.value = CallUIState.Incoming(appCallInfo)
+            _socketState.value = SocketConnectionState.READY
+            // Show notification for foreground incoming call
+            showIncomingCallNotification(appCallInfo, Provider.TELNYX)
             return
         }
 
         if (twilioState is TwilioCallState.IncomingCall) {
             val appCallInfo = mapTwilioCallInfo(twilioState.callInfo)
             currentProvider = Provider.TWILIO
+            incomingCallId = appCallInfo.callId
             _callState.value = CallState.IncomingCall(appCallInfo)
+            _callUIState.value = CallUIState.Incoming(appCallInfo)
+            _socketState.value = SocketConnectionState.READY
+            // Show notification for foreground incoming call
+            showIncomingCallNotification(appCallInfo, Provider.TWILIO)
             return
         }
 
@@ -142,6 +284,8 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
             val appCallInfo = mapTelnyxCallInfo(telnyxState.callInfo)
             currentProvider = Provider.TELNYX
             _callState.value = CallState.Ringing(appCallInfo)
+            _callUIState.value = CallUIState.Ringing(appCallInfo)
+            _socketState.value = SocketConnectionState.READY
             return
         }
 
@@ -149,17 +293,21 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
             val appCallInfo = mapTwilioCallInfo(twilioState.callInfo)
             currentProvider = Provider.TWILIO
             _callState.value = CallState.Ringing(appCallInfo)
+            _callUIState.value = CallUIState.Ringing(appCallInfo)
+            _socketState.value = SocketConnectionState.READY
             return
         }
 
         // Check for errors
         if (telnyxState is TelnyxCallState.Error) {
             _callState.value = CallState.Error(telnyxState.message, Provider.TELNYX)
+            _callUIState.value = CallUIState.Idle
             return
         }
 
         if (twilioState is TwilioCallState.Error) {
             _callState.value = CallState.Error(twilioState.message, Provider.TWILIO)
+            _callUIState.value = CallUIState.Idle
             return
         }
 
@@ -170,10 +318,18 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (twilioState is TwilioCallState.Registered) {
             readyProviders.add(Provider.TWILIO)
+            // Save registration timestamp for Twilio best practices
+            com.telnyx.voice.demo.util.SettingsStorage.saveTwilioRegistration(
+                getApplication(),
+                twilioState.fcmToken
+            )
+            Timber.d("Twilio registration saved: token=${twilioState.fcmToken.take(20)}...")
         }
 
         if (readyProviders.isNotEmpty()) {
             _callState.value = CallState.Ready(readyProviders)
+            _callUIState.value = CallUIState.Idle
+            _socketState.value = SocketConnectionState.READY
             return
         }
 
@@ -181,11 +337,15 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
         if (telnyxState is TelnyxCallState.Connecting ||
             twilioState is TwilioCallState.Registering) {
             _callState.value = CallState.Registering
+            _callUIState.value = CallUIState.Idle
+            _socketState.value = SocketConnectionState.CONNECTING
             return
         }
 
         // Default to idle
         _callState.value = CallState.Idle
+        _callUIState.value = CallUIState.Idle
+        _socketState.value = SocketConnectionState.DISCONNECTED
     }
 
     private fun mapTelnyxCallInfo(telnyxCallInfo: com.telnyx.voice.logic.models.CallInfo): CallInfo {
@@ -227,8 +387,102 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
         callDurationJob = null
     }
 
+    private fun dismissIncomingCallNotification() {
+        incomingCallId?.let { callId ->
+            notificationManager.cancel(callId.hashCode())
+            Timber.d("Notification dismissed for call: $callId")
+            incomingCallId = null
+        }
+    }
+
+    private fun showIncomingCallNotification(callInfo: CallInfo, provider: Provider) {
+        createNotificationChannel()
+
+        val providerName = provider.name
+
+        // Answer intent
+        val answerIntent = Intent(getApplication(), CallActionReceiver::class.java).apply {
+            action = CallActionReceiver.ACTION_ANSWER_CALL
+            putExtra(CallActionReceiver.EXTRA_CALL_ID, callInfo.callId)
+            putExtra(CallActionReceiver.EXTRA_PROVIDER, providerName)
+        }
+        val answerPendingIntent = PendingIntent.getBroadcast(
+            getApplication(),
+            callInfo.callId.hashCode(),
+            answerIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Decline intent
+        val declineIntent = Intent(getApplication(), CallActionReceiver::class.java).apply {
+            action = CallActionReceiver.ACTION_DECLINE_CALL
+            putExtra(CallActionReceiver.EXTRA_CALL_ID, callInfo.callId)
+            putExtra(CallActionReceiver.EXTRA_PROVIDER, providerName)
+        }
+        val declinePendingIntent = PendingIntent.getBroadcast(
+            getApplication(),
+            callInfo.callId.hashCode() + 1,
+            declineIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Full screen intent
+        val fullScreenIntent = Intent(getApplication(), MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(CallActionReceiver.EXTRA_FROM_NOTIFICATION, true)
+        }
+        val fullScreenPendingIntent = PendingIntent.getActivity(
+            getApplication(),
+            callInfo.callId.hashCode() + 2,
+            fullScreenIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(getApplication(), NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_menu_call)
+            .setContentTitle("Incoming $providerName Call")
+            .setContentText("${callInfo.remoteName ?: callInfo.remoteNumber}")
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setFullScreenIntent(fullScreenPendingIntent, true)
+            .setContentIntent(fullScreenPendingIntent)
+            .addAction(
+                android.R.drawable.ic_menu_call,
+                "Answer",
+                answerPendingIntent
+            )
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "Decline",
+                declinePendingIntent
+            )
+            .setAutoCancel(true)
+            .setOngoing(true)
+            .build()
+
+        notificationManager.notify(callInfo.callId.hashCode(), notification)
+        Timber.d("Incoming call notification shown for ${callInfo.callId}")
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Incoming Calls",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notifications for incoming voice calls"
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         stopCallDurationTimer()
+    }
+
+    companion object {
+        private const val NOTIFICATION_CHANNEL_ID = "IncomingCallChannel"
     }
 }
