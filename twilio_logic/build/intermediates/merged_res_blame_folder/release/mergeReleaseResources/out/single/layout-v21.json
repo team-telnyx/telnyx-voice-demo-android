@@ -1,0 +1,18 @@
+[
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/layout-v21/notification_action_tombstone.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/layout-v21/notification_action_tombstone.xml"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/layout-v21/notification_template_icon_group.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/layout-v21/notification_template_icon_group.xml"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/layout-v21/notification_template_custom_big.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/layout-v21/notification_template_custom_big.xml"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/layout-v21/notification_action.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/layout-v21/notification_action.xml"
+    }
+]

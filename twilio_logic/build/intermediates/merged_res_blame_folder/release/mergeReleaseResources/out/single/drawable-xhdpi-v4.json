@@ -1,0 +1,22 @@
+[
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable-xhdpi-v4/notification_bg_normal_pressed.9.png",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable-xhdpi-v4/notification_bg_normal_pressed.9.png"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable-xhdpi-v4/notify_panel_notification_icon_bg.png",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable-xhdpi-v4/notify_panel_notification_icon_bg.png"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable-xhdpi-v4/notification_bg_low_normal.9.png",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable-xhdpi-v4/notification_bg_low_normal.9.png"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable-xhdpi-v4/notification_bg_normal.9.png",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable-xhdpi-v4/notification_bg_normal.9.png"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable-xhdpi-v4/notification_bg_low_pressed.9.png",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable-xhdpi-v4/notification_bg_low_pressed.9.png"
+    }
+]

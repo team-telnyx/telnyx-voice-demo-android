@@ -41,10 +41,14 @@ android {
 }
 
 dependencies {
+    // Module dependencies
+    implementation(project(":telnyx_logic"))
+    implementation(project(":twilio_logic"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)

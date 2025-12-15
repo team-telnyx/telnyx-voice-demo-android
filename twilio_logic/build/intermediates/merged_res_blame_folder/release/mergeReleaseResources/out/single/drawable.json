@@ -1,0 +1,42 @@
+[
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable/ic_call_answer_low.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable/ic_call_answer_low.xml"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable/ic_call_answer_video.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable/ic_call_answer_video.xml"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable/notification_icon_background.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable/notification_icon_background.xml"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable/ic_call_decline.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable/ic_call_decline.xml"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable/ic_call_decline_low.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable/ic_call_decline_low.xml"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable/notification_bg.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable/notification_bg.xml"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable/ic_call_answer_video_low.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable/ic_call_answer_video_low.xml"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable/notification_bg_low.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable/notification_bg_low.xml"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable/ic_call_answer.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable/ic_call_answer.xml"
+    },
+    {
+        "merged": "com.twilio.voice.logic.twilio_logic-release-12:/drawable/notification_tile_bg.xml",
+        "source": "com.twilio.voice.logic.twilio_logic-core-1.17.0-0:/drawable/notification_tile_bg.xml"
+    }
+]

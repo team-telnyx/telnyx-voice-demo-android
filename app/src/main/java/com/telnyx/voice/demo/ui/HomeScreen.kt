@@ -6,11 +6,26 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.telnyx.voice.demo.CallManager
+import com.telnyx.voice.demo.CallViewModel
+import com.telnyx.voice.demo.models.CallState
 
 @Composable
-fun HomeScreen() {
-        val status by CallManager.status.collectAsState()
+fun HomeScreen(viewModel: CallViewModel) {
+        val callState by viewModel.callState.collectAsState()
+
+        // Navigate to active call screen when call is active/ringing/incoming
+        when (callState) {
+                is CallState.IncomingCall,
+                is CallState.Ringing,
+                is CallState.Active -> {
+                        ActiveCallScreen(viewModel, callState)
+                        return
+                }
+                else -> {
+                        // Show registration screen
+                }
+        }
+
         var twilioToken by remember { mutableStateOf("") }
         var telnyxToken by remember { mutableStateOf("") }
         var fcmToken by remember {
@@ -28,7 +43,7 @@ fun HomeScreen() {
                 )
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Text(text = "Status: $status", style = MaterialTheme.typography.bodyLarge)
+                Text(text = "Status: ${getStatusText(callState)}", style = MaterialTheme.typography.bodyLarge)
                 Spacer(modifier = Modifier.height(24.dp))
 
                 OutlinedTextField(
@@ -39,7 +54,7 @@ fun HomeScreen() {
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
-                        onClick = { CallManager.registerTwilio(twilioToken, fcmToken) },
+                        onClick = { viewModel.registerTwilio(twilioToken, fcmToken) },
                         modifier = Modifier.fillMaxWidth()
                 ) { Text("Register Twilio") }
 
@@ -53,7 +68,7 @@ fun HomeScreen() {
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
-                        onClick = { CallManager.connectTelnyx(telnyxToken, fcmToken) },
+                        onClick = { viewModel.connectTelnyx(telnyxToken, fcmToken) },
                         modifier = Modifier.fillMaxWidth()
                 ) { Text("Connect Telnyx (Token)") }
 
@@ -80,7 +95,7 @@ fun HomeScreen() {
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                         onClick = {
-                                CallManager.connectTelnyxWithCredentials(
+                                viewModel.connectTelnyxWithCredentials(
                                         telnyxUser,
                                         telnyxPassword,
                                         fcmToken
@@ -102,12 +117,28 @@ fun HomeScreen() {
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                         onClick = {
-                                CallManager.inviteTelnyx(
-                                        telnyxUser.ifEmpty { "TelnyxUser" },
-                                        destNumber
+                                viewModel.makeCall(
+                                        com.telnyx.voice.demo.models.Provider.TELNYX,
+                                        destNumber,
+                                        mapOf(
+                                                "name" to telnyxUser.ifEmpty { "TelnyxUser" },
+                                                "number" to "1234567890"
+                                        )
                                 )
                         },
                         modifier = Modifier.fillMaxWidth()
-                ) { Text("Call") }
+                ) { Text("Call (Telnyx)") }
+        }
+}
+
+private fun getStatusText(callState: CallState): String {
+        return when (callState) {
+                is CallState.Idle -> "Idle"
+                is CallState.Registering -> "Registering..."
+                is CallState.Ready -> "Ready (${callState.providers.joinToString(", ")})"
+                is CallState.IncomingCall -> "Incoming call from ${callState.callInfo.remoteNumber}"
+                is CallState.Ringing -> "Ringing ${callState.callInfo.remoteNumber}"
+                is CallState.Active -> "Active call (${callState.durationSeconds}s)"
+                is CallState.Error -> "Error: ${callState.message}"
         }
 }

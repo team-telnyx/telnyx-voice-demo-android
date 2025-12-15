@@ -1,0 +1,34 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.telnyx.voice.logic.telnyx_logic-mergeReleaseResources-27:/values-port/values-port.xml",
+            "map": [
+                {
+                    "source": "/Users/oliverzimmerman/.gradle/caches/8.13/transforms/7686eeee5f5981973668cefe3dcd86e2/transformed/appcompat-1.2.0/res/values-port/values-port.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "55",
+                        "endOffsets": "106"
+                    }
+                }
+            ]
+        },
+        {
+            "outputFile": "com.telnyx.voice.logic.telnyx_logic-release-29:/values-port/values-port.xml",
+            "map": [
+                {
+                    "source": "/Users/oliverzimmerman/.gradle/caches/8.13/transforms/7686eeee5f5981973668cefe3dcd86e2/transformed/appcompat-1.2.0/res/values-port/values-port.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "55",
+                        "endOffsets": "106"
+                    }
+                }
+            ]
+        }
+    ]
+}
