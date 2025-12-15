@@ -3,12 +3,18 @@ package com.telnyx.voice.demo
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import com.twilio.voice.Voice
-import com.twilio.voice.MessageListener
+import com.google.gson.Gson
+import com.google.gson.JsonSyntaxException
+import com.telnyx.voice.demo.telnyx.notification.CallNotificationService
+import com.telnyx.webrtc.sdk.model.PushMetaData
 import com.twilio.voice.CallInvite
 import com.twilio.voice.CancelledCallInvite
+import com.twilio.voice.MessageListener
+import com.twilio.voice.Voice
 
 class HybridFirebaseMessagingService : FirebaseMessagingService() {
+
+    private var callNotificationService: CallNotificationService? = null
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
@@ -25,30 +31,52 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
             Log.d(TAG, "Message data payload: ${remoteMessage.data}")
 
             // Try Twilio
-            val handledByTwilio = Voice.handleMessage(this, remoteMessage.data, object : MessageListener {
-                override fun onCallInvite(callInvite: CallInvite) {
-                    Log.d(TAG, "Twilio Call Invite Received")
-                    // TwilioClient should handle this via its listener if registered?
-                    // Actually, Voice.handleMessage triggers the listener passed to it.
-                    // We might need to notify TwilioClient or show UI.
-                    // For this demo, we'll just log.
-                }
+            val handledByTwilio =
+                    Voice.handleMessage(
+                            this,
+                            remoteMessage.data,
+                            object : MessageListener {
+                                override fun onCallInvite(callInvite: CallInvite) {
+                                    Log.d(TAG, "Twilio Call Invite Received")
+                                }
 
-                override fun onCancelledCallInvite(cancelledCallInvite: CancelledCallInvite, callException: com.twilio.voice.CallException?) {
-                    Log.d(TAG, "Twilio Call Invite Cancelled with error: ${callException?.message}")
-                }
-            })
+                                override fun onCancelledCallInvite(
+                                        cancelledCallInvite: CancelledCallInvite,
+                                        callException: com.twilio.voice.CallException?
+                                ) {
+                                    Log.d(
+                                            TAG,
+                                            "Twilio Call Invite Cancelled with error: ${callException?.message}"
+                                    )
+                                }
+                            }
+                    )
 
             if (handledByTwilio) {
                 Log.d(TAG, "Message handled by Twilio")
             } else {
                 Log.d(TAG, "Message not handled by Twilio, trying Telnyx")
-                // Try to parse as Telnyx
-                // val pushMetaData = TxPushMetaData.fromJson(remoteMessage.data)
-                // if (pushMetaData != null) {
-                //     Log.d(TAG, "Telnyx Push Received: $pushMetaData")
-                //     // Show notification or notify CallManager
-                // }
+
+                // Initialize CallNotificationService if needed
+                if (callNotificationService == null) {
+                    callNotificationService = CallNotificationService(this)
+                }
+
+                try {
+                    val metadata = remoteMessage.data["metadata"]
+                    if (metadata != null) {
+                        val telnyxPushMetadata = Gson().fromJson(metadata, PushMetaData::class.java)
+                        telnyxPushMetadata?.let {
+                            Log.d(TAG, "Telnyx Push Received: $it")
+                            callNotificationService?.showIncomingCallNotification(it)
+                            return
+                        }
+                    }
+                } catch (e: JsonSyntaxException) {
+                    Log.e(TAG, "Error parsing push metadata JSON", e)
+                }
+
+                // Fallback or other handling
                 CallManager.getTelnyxClient()?.handlePush(remoteMessage.data)
             }
         }

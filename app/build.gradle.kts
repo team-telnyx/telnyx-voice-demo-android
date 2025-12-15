@@ -53,6 +53,8 @@ dependencies {
     implementation(libs.twilio.voice)
     implementation(libs.telnyx.webrtc)
     implementation(libs.firebase.messaging)
+    implementation(libs.timber)
+    implementation(libs.gson)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
