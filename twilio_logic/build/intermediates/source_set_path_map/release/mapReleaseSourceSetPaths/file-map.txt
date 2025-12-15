@@ -1,0 +1,16 @@
+com.twilio.voice.logic.twilio_logic-core-1.17.0-0 /Users/oliverzimmerman/.gradle/caches/8.13/transforms/133d9158b336c2f728ea60fbcc88b90b/transformed/core-1.17.0/res
+com.twilio.voice.logic.twilio_logic-profileinstaller-1.3.0-1 /Users/oliverzimmerman/.gradle/caches/8.13/transforms/2191ddd46a2eb64b35b77045c69ae1cd/transformed/profileinstaller-1.3.0/res
+com.twilio.voice.logic.twilio_logic-lifecycle-runtime-2.6.2-2 /Users/oliverzimmerman/.gradle/caches/8.13/transforms/29a9d083bcc75a1c48a47aa6f08345fc/transformed/lifecycle-runtime-2.6.2/res
+com.twilio.voice.logic.twilio_logic-core-ktx-1.17.0-3 /Users/oliverzimmerman/.gradle/caches/8.13/transforms/5e4c92540606094a6ef6463aa9c41227/transformed/core-ktx-1.17.0/res
+com.twilio.voice.logic.twilio_logic-tracing-1.2.0-4 /Users/oliverzimmerman/.gradle/caches/8.13/transforms/5f5505952bc091b1eacfb79faec7416b/transformed/tracing-1.2.0/res
+com.twilio.voice.logic.twilio_logic-core-viewtree-1.0.0-5 /Users/oliverzimmerman/.gradle/caches/8.13/transforms/608dba29fede3d30a88fd74470c02fe7/transformed/core-viewtree-1.0.0/res
+com.twilio.voice.logic.twilio_logic-startup-runtime-1.1.1-6 /Users/oliverzimmerman/.gradle/caches/8.13/transforms/805dc6cc9487892cf7b6bb612418d66f/transformed/startup-runtime-1.1.1/res
+com.twilio.voice.logic.twilio_logic-annotation-experimental-1.4.1-7 /Users/oliverzimmerman/.gradle/caches/8.13/transforms/a58ea799d08d6a1b79b7cf43129c8d76/transformed/annotation-experimental-1.4.1/res
+com.twilio.voice.logic.twilio_logic-core-runtime-2.2.0-8 /Users/oliverzimmerman/.gradle/caches/8.13/transforms/d989d01d4f82e5fb427c8bebb7676a0a/transformed/core-runtime-2.2.0/res
+com.twilio.voice.logic.twilio_logic-pngs-9 /Users/oliverzimmerman/Documents/GitHub/telnyx-voice-demo-android/twilio_logic/build/generated/res/pngs/release
+com.twilio.voice.logic.twilio_logic-resValues-10 /Users/oliverzimmerman/Documents/GitHub/telnyx-voice-demo-android/twilio_logic/build/generated/res/resValues/release
+com.twilio.voice.logic.twilio_logic-mergeReleaseResources-11 /Users/oliverzimmerman/Documents/GitHub/telnyx-voice-demo-android/twilio_logic/build/intermediates/incremental/release/mergeReleaseResources/merged.dir
+com.twilio.voice.logic.twilio_logic-mergeReleaseResources-12 /Users/oliverzimmerman/Documents/GitHub/telnyx-voice-demo-android/twilio_logic/build/intermediates/incremental/release/mergeReleaseResources/stripped.dir
+com.twilio.voice.logic.twilio_logic-release-13 /Users/oliverzimmerman/Documents/GitHub/telnyx-voice-demo-android/twilio_logic/build/intermediates/merged_res/release/mergeReleaseResources
+com.twilio.voice.logic.twilio_logic-main-14 /Users/oliverzimmerman/Documents/GitHub/telnyx-voice-demo-android/twilio_logic/src/main/res
+com.twilio.voice.logic.twilio_logic-release-15 /Users/oliverzimmerman/Documents/GitHub/telnyx-voice-demo-android/twilio_logic/src/release/res

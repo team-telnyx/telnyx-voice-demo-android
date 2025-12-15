@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.telnyx.voice.logic.telnyx_logic-release-29:/mipmap-anydpi-v26/ic_launcher_round.xml",
+        "source": "com.telnyx.voice.logic.telnyx_logic-library-1.0.1-6:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    },
+    {
+        "merged": "com.telnyx.voice.logic.telnyx_logic-release-29:/mipmap-anydpi-v26/ic_launcher.xml",
+        "source": "com.telnyx.voice.logic.telnyx_logic-library-1.0.1-6:/mipmap-anydpi-v26/ic_launcher.xml"
+    }
+]

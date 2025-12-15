@@ -16,9 +16,12 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://jitpack.io") }
     }
 }
 
 rootProject.name = "Telnyx Voice Demo Android"
 include(":app")
+include(":telnyx_logic")
+include(":twilio_logic")
  

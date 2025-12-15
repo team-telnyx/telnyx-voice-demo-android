@@ -1,0 +1,4 @@
+com.telnyx.voice.logic
+drawable ic_call_end_white
+drawable ic_call_white
+drawable ic_stat_contact_phone

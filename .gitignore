@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+ios_reference/telnyx-voice-demo-ios/
+backend_reference/telnyx-voice-demo-backend/
+/twilio_logic/build
+/twilio_logic/build
+app/google-services.json
+android_telnyx_reference/telnyx-webrtc-android/
