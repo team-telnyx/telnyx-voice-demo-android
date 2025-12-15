@@ -133,7 +133,8 @@ class TelnyxService(private val context: Context) {
             currentCallInfo?.let { info ->
                 val activeCallInfo = info.copy(startTime = System.currentTimeMillis())
                 _state.value = TelnyxCallState.Active(activeCallInfo)
-                CallForegroundService.startService(context, info.callId)
+                val callerInfo = info.remoteName ?: info.remoteNumber
+                CallForegroundService.startService(context, info.callId, callerInfo)
                 Timber.d("Optimistically transitioned to Active: ${info.callId}")
             }
 
@@ -404,7 +405,8 @@ class TelnyxService(private val context: Context) {
                 existingCallInfo?.let { info ->
                     val activeCallInfo = info.copy(startTime = System.currentTimeMillis())
                     _state.value = TelnyxCallState.Active(activeCallInfo)
-                    CallForegroundService.startService(context, info.callId)
+                    val callerInfo = info.remoteName ?: info.remoteNumber
+                    CallForegroundService.startService(context, info.callId, callerInfo)
 
                     Timber.d("✅ Call is now ACTIVE: callId=${info.callId}, remote=${info.remoteNumber}")
                 } ?: run {

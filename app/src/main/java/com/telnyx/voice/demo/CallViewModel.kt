@@ -1,13 +1,7 @@
 package com.telnyx.voice.demo
 
 import android.app.Application
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.os.Build
-import androidx.core.app.NotificationCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.telnyx.voice.demo.models.CallInfo
@@ -15,6 +9,7 @@ import com.telnyx.voice.demo.models.CallState
 import com.telnyx.voice.demo.models.Provider
 import com.telnyx.voice.demo.models.CallUIState
 import com.telnyx.voice.demo.models.SocketConnectionState
+import com.telnyx.voice.demo.notification.CallNotificationService
 import com.telnyx.voice.logic.models.TelnyxCallState
 import com.telnyx.voice.logic.service.TelnyxService
 import com.telnyx.voice.demo.network.RetrofitClient
@@ -61,8 +56,11 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
     private var currentProvider: Provider? = null
     private var incomingCallId: String? = null
 
-    private val notificationManager: NotificationManager =
-        application.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    // Centralized notification service
+    private val callNotificationService = CallNotificationService(
+        context = application,
+        receiverClass = CallActionReceiver::class.java
+    )
 
     sealed class TokenFetchState {
         object Idle : TokenFetchState()
@@ -389,100 +387,22 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun dismissIncomingCallNotification() {
         incomingCallId?.let { callId ->
-            notificationManager.cancel(callId.hashCode())
+            callNotificationService.cancelNotification()
             Timber.d("Notification dismissed for call: $callId")
             incomingCallId = null
         }
     }
 
     private fun showIncomingCallNotification(callInfo: CallInfo, provider: Provider) {
-        createNotificationChannel()
+        // Delegate to CallNotificationService
+        callNotificationService.showIncomingCallNotification(callInfo, provider)
 
-        val providerName = provider.name
-
-        // Answer intent
-        val answerIntent = Intent(getApplication(), CallActionReceiver::class.java).apply {
-            action = CallActionReceiver.ACTION_ANSWER_CALL
-            putExtra(CallActionReceiver.EXTRA_CALL_ID, callInfo.callId)
-            putExtra(CallActionReceiver.EXTRA_PROVIDER, providerName)
-        }
-        val answerPendingIntent = PendingIntent.getBroadcast(
-            getApplication(),
-            callInfo.callId.hashCode(),
-            answerIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Decline intent
-        val declineIntent = Intent(getApplication(), CallActionReceiver::class.java).apply {
-            action = CallActionReceiver.ACTION_DECLINE_CALL
-            putExtra(CallActionReceiver.EXTRA_CALL_ID, callInfo.callId)
-            putExtra(CallActionReceiver.EXTRA_PROVIDER, providerName)
-        }
-        val declinePendingIntent = PendingIntent.getBroadcast(
-            getApplication(),
-            callInfo.callId.hashCode() + 1,
-            declineIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Full screen intent
-        val fullScreenIntent = Intent(getApplication(), MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(CallActionReceiver.EXTRA_FROM_NOTIFICATION, true)
-        }
-        val fullScreenPendingIntent = PendingIntent.getActivity(
-            getApplication(),
-            callInfo.callId.hashCode() + 2,
-            fullScreenIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notification = NotificationCompat.Builder(getApplication(), NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_call)
-            .setContentTitle("Incoming $providerName Call")
-            .setContentText("${callInfo.remoteName ?: callInfo.remoteNumber}")
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
-            .setContentIntent(fullScreenPendingIntent)
-            .addAction(
-                android.R.drawable.ic_menu_call,
-                "Answer",
-                answerPendingIntent
-            )
-            .addAction(
-                android.R.drawable.ic_menu_close_clear_cancel,
-                "Decline",
-                declinePendingIntent
-            )
-            .setAutoCancel(true)
-            .setOngoing(true)
-            .build()
-
-        notificationManager.notify(callInfo.callId.hashCode(), notification)
-        Timber.d("Incoming call notification shown for ${callInfo.callId}")
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
-                "Incoming Calls",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Notifications for incoming voice calls"
-            }
-            notificationManager.createNotificationChannel(channel)
-        }
+        // Track for dismissal
+        incomingCallId = callInfo.callId
     }
 
     override fun onCleared() {
         super.onCleared()
         stopCallDurationTimer()
-    }
-
-    companion object {
-        private const val NOTIFICATION_CHANNEL_ID = "IncomingCallChannel"
     }
 }

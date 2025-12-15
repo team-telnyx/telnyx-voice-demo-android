@@ -45,8 +45,18 @@
             <intent-filter>
                 <action android:name="com.telnyx.voice.demo.ACTION_ANSWER_CALL" />
                 <action android:name="com.telnyx.voice.demo.ACTION_DECLINE_CALL" />
+                <action android:name="com.telnyx.voice.demo.ACTION_END_CALL" />
             </intent-filter>
         </receiver>
+
+        <service
+            android:name=".BackgroundCallDeclineService"
+            android:exported="false" />
+
+        <service
+            android:name="com.telnyx.voice.logic.service.CallForegroundService"
+            android:foregroundServiceType="phoneCall|microphone"
+            android:exported="false" />
     </application>
 
 </manifest>

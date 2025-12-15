@@ -6,6 +6,7 @@ import com.google.gson.Gson
 import com.telnyx.voice.demo.models.Provider
 import com.telnyx.voice.demo.models.TelnyxSettings
 import com.telnyx.voice.demo.models.TwilioSettings
+import androidx.core.content.edit
 
 object SettingsStorage {
     private const val PREFS_NAME = "voice_demo_settings"
@@ -29,7 +30,7 @@ object SettingsStorage {
     // Telnyx Settings
     fun saveTelnyxSettings(context: Context, settings: TelnyxSettings) {
         val json = gson.toJson(settings)
-        getPrefs(context).edit().putString(KEY_TELNYX_SETTINGS, json).apply()
+        getPrefs(context).edit { putString(KEY_TELNYX_SETTINGS, json) }
     }
 
     fun getTelnyxSettings(context: Context): TelnyxSettings {
@@ -44,7 +45,7 @@ object SettingsStorage {
     // Twilio Settings
     fun saveTwilioSettings(context: Context, settings: TwilioSettings) {
         val json = gson.toJson(settings)
-        getPrefs(context).edit().putString(KEY_TWILIO_SETTINGS, json).apply()
+        getPrefs(context).edit { putString(KEY_TWILIO_SETTINGS, json) }
     }
 
     fun getTwilioSettings(context: Context): TwilioSettings {
@@ -58,21 +59,21 @@ object SettingsStorage {
 
     // Active Provider
     fun saveActiveProvider(context: Context, provider: Provider) {
-        getPrefs(context).edit().putString(KEY_ACTIVE_PROVIDER, provider.name).apply()
+        getPrefs(context).edit { putString(KEY_ACTIVE_PROVIDER, provider.name) }
     }
 
     fun getActiveProvider(context: Context): Provider {
         val providerName = getPrefs(context).getString(KEY_ACTIVE_PROVIDER, Provider.TELNYX.name)
         return try {
             Provider.valueOf(providerName!!)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Provider.TELNYX
         }
     }
 
     // Last Destination
     fun saveLastDestination(context: Context, destination: String) {
-        getPrefs(context).edit().putString(KEY_LAST_DESTINATION, destination).apply()
+        getPrefs(context).edit { putString(KEY_LAST_DESTINATION, destination) }
     }
 
     fun getLastDestination(context: Context): String {
@@ -81,7 +82,7 @@ object SettingsStorage {
 
     // Push Token
     fun savePushToken(context: Context, token: String) {
-        getPrefs(context).edit().putString(KEY_PUSH_TOKEN, token).apply()
+        getPrefs(context).edit { putString(KEY_PUSH_TOKEN, token) }
     }
 
     fun getPushToken(context: Context): String? {
@@ -90,10 +91,10 @@ object SettingsStorage {
 
     // Twilio Registration Tracking
     fun saveTwilioRegistration(context: Context, token: String) {
-        getPrefs(context).edit()
-            .putString(KEY_TWILIO_REGISTERED_TOKEN, token)
-            .putLong(KEY_TWILIO_REGISTRATION_TIMESTAMP, System.currentTimeMillis())
-            .apply()
+        getPrefs(context).edit {
+            putString(KEY_TWILIO_REGISTERED_TOKEN, token)
+                .putLong(KEY_TWILIO_REGISTRATION_TIMESTAMP, System.currentTimeMillis())
+        }
     }
 
     fun getTwilioRegisteredToken(context: Context): String? {
@@ -126,10 +127,6 @@ object SettingsStorage {
 
         // Registration is older than 6 months
         val age = System.currentTimeMillis() - registrationTimestamp
-        if (age > REGISTRATION_EXPIRY_MILLIS) {
-            return true
-        }
-
-        return false
+        return age > REGISTRATION_EXPIRY_MILLIS
     }
 }
