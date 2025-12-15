@@ -16,6 +16,7 @@ import com.twilio.voice.CallInvite
 import com.twilio.voice.CancelledCallInvite
 import com.twilio.voice.MessageListener
 import com.twilio.voice.Voice
+import org.json.JSONObject
 import timber.log.Timber
 
 class HybridFirebaseMessagingService : FirebaseMessagingService() {
@@ -82,6 +83,24 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
                 Timber.tag(TAG).d("Message not handled by Twilio, trying Telnyx")
 
                 try {
+                    // Check if this is a missed call notification
+                    val objects = JSONObject(remoteMessage.data as Map<*, *>)
+                    val message = objects.optString("message", "")
+                    val isMissedCall = message == MISSED_CALL_MESSAGE
+
+                    if (isMissedCall) {
+                        Timber.tag(TAG).d("Missed call notification received")
+                        val metadata = objects.optString("metadata", "")
+                        if (metadata.isNotEmpty()) {
+                            val telnyxPushMetadata = Gson().fromJson(metadata, PushMetaData::class.java)
+                            telnyxPushMetadata?.let { pushData ->
+                                handleTelnyxMissedCall(pushData)
+                            }
+                        }
+                        return
+                    }
+
+                    // Handle incoming call
                     val metadata = remoteMessage.data["metadata"]
                     if (metadata != null) {
                         val telnyxPushMetadata = Gson().fromJson(metadata, PushMetaData::class.java)
@@ -94,6 +113,8 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
                     }
                 } catch (e: JsonSyntaxException) {
                     Timber.tag(TAG).e(e, "Error parsing push metadata JSON")
+                } catch (e: Exception) {
+                    Timber.tag(TAG).e(e, "Error processing Telnyx push notification")
                 }
             }
         }
@@ -126,6 +147,19 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
 
         // Show notification
         showIncomingCallNotification(
+            callId = metadata.callId,
+            provider = "TELNYX",
+            callerName = metadata.callerName,
+            callerNumber = metadata.callerNumber
+        )
+    }
+
+    private fun handleTelnyxMissedCall(metadata: PushMetaData) {
+        // Dismiss any existing incoming call notification
+        notificationManager.cancel(metadata.callId.hashCode())
+
+        // Show missed call notification
+        showMissedCallNotification(
             callId = metadata.callId,
             provider = "TELNYX",
             callerName = metadata.callerName,
@@ -204,6 +238,45 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
         notificationManager.notify(callId.hashCode(), notification)
     }
 
+    private fun showMissedCallNotification(
+        callId: String,
+        provider: String,
+        callerName: String,
+        callerNumber: String
+    ) {
+        createMissedCallNotificationChannel()
+
+        // Intent to open app
+        val openAppIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val openAppPendingIntent = PendingIntent.getActivity(
+            this,
+            callId.hashCode(),
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val displayName = if (callerName.isNotEmpty()) {
+            "$callerName ($callerNumber)"
+        } else {
+            callerNumber
+        }
+
+        val notification = NotificationCompat.Builder(this, MISSED_CALL_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_contact_phone)
+            .setContentTitle("Missed $provider Call")
+            .setContentText(displayName)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_MISSED_CALL)
+            .setContentIntent(openAppPendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        notificationManager.notify(callId.hashCode(), notification)
+        Timber.tag(TAG).d("Missed call notification shown for $displayName")
+    }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -217,8 +290,24 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
+    private fun createMissedCallNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                MISSED_CALL_CHANNEL_ID,
+                "Missed Calls",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Notifications for missed voice calls"
+                setShowBadge(true)
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
     companion object {
         private const val TAG = "HybridFCMService"
         private const val CHANNEL_ID = "IncomingCallChannel"
+        private const val MISSED_CALL_CHANNEL_ID = "MissedCallChannel"
+        private const val MISSED_CALL_MESSAGE = "Missed call!"
     }
 }
