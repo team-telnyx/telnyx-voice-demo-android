@@ -145,12 +145,16 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
         val app = application as VoiceApplication
         app.telnyxService.handlePushData(metadata)
 
+        // Serialize metadata to JSON for passing through intent chain
+        val metadataJson = Gson().toJson(metadata)
+
         // Show notification
         showIncomingCallNotification(
             callId = metadata.callId,
             provider = "TELNYX",
             callerName = metadata.callerName,
-            callerNumber = metadata.callerNumber
+            callerNumber = metadata.callerNumber,
+            pushMetadata = metadataJson
         )
     }
 
@@ -171,7 +175,8 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
         callId: String,
         provider: String,
         callerName: String,
-        callerNumber: String
+        callerNumber: String,
+        pushMetadata: String? = null
     ) {
         createNotificationChannel()
 
@@ -180,6 +185,7 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
             action = CallActionReceiver.ACTION_ANSWER_CALL
             putExtra(CallActionReceiver.EXTRA_CALL_ID, callId)
             putExtra(CallActionReceiver.EXTRA_PROVIDER, provider)
+            pushMetadata?.let { putExtra(EXTRA_PUSH_METADATA, it) }
         }
         val answerPendingIntent = PendingIntent.getBroadcast(
             this,
@@ -309,5 +315,6 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
         private const val CHANNEL_ID = "IncomingCallChannel"
         private const val MISSED_CALL_CHANNEL_ID = "MissedCallChannel"
         private const val MISSED_CALL_MESSAGE = "Missed call!"
+        const val EXTRA_PUSH_METADATA = "pushMetadata"
     }
 }

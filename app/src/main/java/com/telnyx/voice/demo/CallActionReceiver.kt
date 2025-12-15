@@ -11,8 +11,9 @@ class CallActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val callId = intent.getStringExtra(EXTRA_CALL_ID) ?: return
         val provider = intent.getStringExtra(EXTRA_PROVIDER)
+        val pushMetadata = intent.getStringExtra(HybridFirebaseMessagingService.EXTRA_PUSH_METADATA)
 
-        Timber.d("CallActionReceiver: action=${intent.action}, provider=$provider, callId=$callId")
+        Timber.d("CallActionReceiver: action=${intent.action}, provider=$provider, callId=$callId, hasPushMetadata=${pushMetadata != null}")
 
         when (intent.action) {
             ACTION_ANSWER_CALL -> {
@@ -30,6 +31,7 @@ class CallActionReceiver : BroadcastReceiver() {
                     putExtra(EXTRA_CALL_ID, callId)
                     putExtra(EXTRA_PROVIDER, provider)
                     putExtra(EXTRA_FROM_NOTIFICATION, true)
+                    pushMetadata?.let { putExtra(HybridFirebaseMessagingService.EXTRA_PUSH_METADATA, it) }
                 }
                 context.startActivity(launchIntent)
                 Timber.d("Launching MainActivity to answer call")
