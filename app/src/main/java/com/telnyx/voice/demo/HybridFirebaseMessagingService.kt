@@ -142,8 +142,8 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun handleTelnyxPush(metadata: PushMetaData) {
-        val app = application as VoiceApplication
-        app.telnyxService.handlePushData(metadata)
+        // Note: telnyx_common handles push notification flow automatically
+        // We just need to show the notification
 
         // Serialize metadata to JSON for passing through intent chain
         val metadataJson = Gson().toJson(metadata)

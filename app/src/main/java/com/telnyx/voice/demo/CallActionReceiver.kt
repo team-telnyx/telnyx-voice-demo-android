@@ -4,7 +4,10 @@ import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.lifecycle.ViewModelProvider
+import com.telnyx.webrtc.common.TelnyxCommon
 import timber.log.Timber
+import java.util.UUID
 
 class CallActionReceiver : BroadcastReceiver() {
 
@@ -34,42 +37,63 @@ class CallActionReceiver : BroadcastReceiver() {
                 val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 notificationManager.cancel(callId.hashCode())
 
-                // Use background service to decline without launching app
-                BackgroundCallDeclineService.start(context, callId, provider)
-                Timber.d("Started BackgroundCallDeclineService for call decline")
+                // Handle decline based on provider
+                when (provider) {
+                    "TELNYX" -> {
+                        // Use telnyx_common's BackgroundCallDeclineService for Telnyx
+                        // Note: telnyx_common handles this via its own BackgroundCallDeclineService
+                        val app = context.applicationContext as? VoiceApplication
+                        app?.let {
+                            // For now, directly reject via TelnyxCommon since we're in foreground
+                            // The proper telnyx_common flow will handle background decline
+                            try {
+                                TelnyxCommon.getInstance().currentCall?.endCall(UUID.fromString(callId))
+                                Timber.d("Telnyx call declined via TelnyxCommon")
+                            } catch (e: Exception) {
+                                Timber.e(e, "Error declining Telnyx call")
+                            }
+                        }
+                    }
+                    "TWILIO" -> {
+                        // Handle Twilio decline directly (no background service needed)
+                        val app = context.applicationContext as? VoiceApplication
+                        app?.twilioService?.rejectIncomingCall()
+                        Timber.d("Twilio call declined")
+                    }
+                }
             }
             ACTION_END_CALL -> {
                 // Handle end call from ongoing call notification
-                // Provider is optional for end call - will try both if not specified
                 Timber.d("End call action from ongoing notification: callId=$callId, provider=${provider ?: "not specified"}")
 
                 try {
                     val app = context.applicationContext as? VoiceApplication
                     app?.let {
-                        if (provider != null) {
-                            // Use specified provider
-                            when (provider) {
-                                "TELNYX" -> {
-                                    it.telnyxService.endCall()
-                                    Timber.d("Call ended via Telnyx service")
-                                }
-                                "TWILIO" -> {
-                                    it.twilioService.endCall()
-                                    Timber.d("Call ended via Twilio service")
-                                }
-                                else -> {
-                                    Timber.w("Unknown provider: $provider, trying both services")
-                                    it.telnyxService.endCall()
-                                    it.twilioService.endCall()
-                                    Timber.d("Call ended via both services (unknown provider)")
+                        when (provider) {
+                            "TELNYX" -> {
+                                // Use TelnyxCommon to end the call
+                                try {
+                                    TelnyxCommon.getInstance().currentCall?.endCall(UUID.fromString(callId))
+                                    Timber.d("Call ended via TelnyxCommon")
+                                } catch (e: IllegalArgumentException) {
+                                    Timber.e(e, "Invalid UUID format for callId: $callId")
                                 }
                             }
-                        } else {
-                            // Fallback: try both services
-                            Timber.d("Provider not specified, trying both services")
-                            it.telnyxService.endCall()
-                            it.twilioService.endCall()
-                            Timber.d("Call ended via both services (no provider specified)")
+                            "TWILIO" -> {
+                                it.twilioService.endCall()
+                                Timber.d("Call ended via Twilio service")
+                            }
+                            else -> {
+                                // Fallback: try both
+                                Timber.w("Unknown provider: $provider, trying both services")
+                                try {
+                                    TelnyxCommon.getInstance().currentCall?.endCall(UUID.fromString(callId))
+                                } catch (e: IllegalArgumentException) {
+                                    Timber.e(e, "Invalid UUID format for callId: $callId")
+                                }
+                                it.twilioService.endCall()
+                                Timber.d("Call ended via both services")
+                            }
                         }
                     } ?: run {
                         Timber.e("VoiceApplication not found, cannot end call")

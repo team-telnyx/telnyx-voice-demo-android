@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "com.telnyx.voice.demo"
-    compileSdk = 36
+    compileSdk = 36  // Required by AndroidX libraries
 
     defaultConfig {
         applicationId = "com.telnyx.voice.demo"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 35  // Keep at 35 to avoid FLAG_MUTABLE enforcement
         versionCode = 1
         versionName = "1.0"
 
@@ -42,7 +42,7 @@ android {
 
 dependencies {
     // Module dependencies
-    implementation(project(":telnyx_logic"))
+    implementation(project(":telnyx_common"))
     implementation(project(":twilio_logic"))
 
     implementation(libs.androidx.core.ktx)

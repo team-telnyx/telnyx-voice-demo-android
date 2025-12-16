@@ -1,3 +1,0 @@
-int drawable ic_call_end_white 0x0
-int drawable ic_call_white 0x0
-int drawable ic_stat_contact_phone 0x0

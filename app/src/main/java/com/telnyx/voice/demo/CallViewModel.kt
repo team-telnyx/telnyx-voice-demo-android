@@ -10,8 +10,10 @@ import com.telnyx.voice.demo.models.Provider
 import com.telnyx.voice.demo.models.CallUIState
 import com.telnyx.voice.demo.models.SocketConnectionState
 import com.telnyx.voice.demo.notification.CallNotificationService
-import com.telnyx.voice.logic.models.TelnyxCallState
-import com.telnyx.voice.logic.service.TelnyxService
+import com.telnyx.webrtc.common.TelnyxViewModel
+import com.telnyx.webrtc.common.TelnyxSocketEvent
+import com.telnyx.webrtc.common.model.Profile
+import androidx.lifecycle.ViewModelProvider
 import com.telnyx.voice.demo.network.RetrofitClient
 import com.telnyx.voice.demo.network.TokenRequest
 import com.twilio.voice.logic.models.TwilioCallState
@@ -24,10 +26,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.util.UUID
 
 class CallViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val telnyxService: TelnyxService = (application as VoiceApplication).telnyxService
+    // Use TelnyxViewModel from telnyx_common instead of custom TelnyxService
+    private val telnyxViewModel: TelnyxViewModel by lazy {
+        ViewModelProvider.AndroidViewModelFactory.getInstance(application)
+            .create(TelnyxViewModel::class.java)
+    }
     private val twilioService: TwilioService = (application as VoiceApplication).twilioService
 
     private val _callState = MutableStateFlow<CallState>(CallState.Idle)
@@ -55,6 +62,10 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
     private var callDurationJob: Job? = null
     private var currentProvider: Provider? = null
     private var incomingCallId: String? = null
+    // Store incoming call details for answering (fixes "Cannot answer call: no current call" error)
+    private var pendingIncomingCall: CallInfo? = null
+    // Store outbound call destination to show during ringing
+    private var outboundDestination: String? = null
 
     // Centralized notification service
     private val callNotificationService = CallNotificationService(
@@ -76,11 +87,30 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
 
     // Registration methods
     fun connectTelnyx(token: String, fcmToken: String) {
-        telnyxService.connectWithToken(token, fcmToken)
+        val profile = Profile(
+            sipToken = token,
+            fcmToken = fcmToken
+        )
+        telnyxViewModel.tokenLogin(
+            viewContext = getApplication(),
+            profile = profile,
+            txPushMetaData = null,
+            autoLogin = true
+        )
     }
 
     fun connectTelnyxWithCredentials(username: String, password: String, fcmToken: String) {
-        telnyxService.connectWithCredentials(username, password, fcmToken)
+        val profile = Profile(
+            sipUsername = username,
+            sipPass = password,
+            fcmToken = fcmToken
+        )
+        telnyxViewModel.credentialLogin(
+            viewContext = getApplication(),
+            profile = profile,
+            txPushMetaData = null,
+            autoLogin = true
+        )
     }
 
     fun registerTwilio(accessToken: String, fcmToken: String) {
@@ -133,7 +163,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun disconnectAll() {
-        telnyxService.disconnect()
+        telnyxViewModel.disconnect(getApplication())
         twilioService.unregister()
         _socketState.value = SocketConnectionState.DISCONNECTED
         _callUIState.value = CallUIState.Idle
@@ -170,11 +200,18 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
 
     // Call control methods
     fun makeCall(provider: Provider, destination: String, callerInfo: Map<String, String>) {
+        // Store destination for display during ringing
+        outboundDestination = destination
+
         when (provider) {
             Provider.TELNYX -> {
                 val callerName = callerInfo["name"] ?: "TelnyxUser"
                 val callerNumber = callerInfo["number"] ?: "1234567890"
-                telnyxService.makeCall(callerName, callerNumber, destination)
+                telnyxViewModel.sendInvite(
+                    viewContext = getApplication(),
+                    destinationNumber = destination,
+                    debug = false
+                )
                 currentProvider = Provider.TELNYX
             }
             Provider.TWILIO -> {
@@ -186,7 +223,24 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
 
     fun answerCall() {
         when (currentProvider) {
-            Provider.TELNYX -> telnyxService.answerCall()
+            Provider.TELNYX -> {
+                // Debug: check state before answering
+                Timber.d("🔍 answerCall() called - pendingIncomingCall: ${pendingIncomingCall?.callId ?: "null"}, telnyxViewModel.currentCall: ${telnyxViewModel.currentCall?.callId ?: "null"}")
+
+                // Use pending incoming call data instead of relying on currentCall
+                val incomingCall = pendingIncomingCall
+                if (incomingCall != null) {
+                    Timber.d("📞 Answering Telnyx call: callId=${incomingCall.callId}, caller=${incomingCall.remoteNumber}")
+                    telnyxViewModel.answerCall(
+                        viewContext = getApplication(),
+                        callId = UUID.fromString(incomingCall.callId),
+                        callerIdNumber = incomingCall.remoteNumber,
+                        debug = false
+                    )
+                } else {
+                    Timber.e("❌ Cannot answer call: no pending incoming call data")
+                }
+            }
             Provider.TWILIO -> twilioService.acceptIncomingCall()
             null -> Timber.e("Cannot answer call: no active provider")
         }
@@ -199,20 +253,23 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
         dismissIncomingCallNotification()
 
         when (currentProvider) {
-            Provider.TELNYX -> telnyxService.endCall()
+            Provider.TELNYX -> telnyxViewModel.endCall(getApplication())
             Provider.TWILIO -> twilioService.endCall()
             null -> Timber.e("Cannot hangup: no active provider")
         }
         stopCallDurationTimer()
         currentProvider = null
+        // Clear pending incoming call data and outbound destination
+        pendingIncomingCall = null
+        outboundDestination = null
     }
 
     // State observation
     private fun observeTelnyxState() {
         viewModelScope.launch {
-            telnyxService.state.collect { telnyxState ->
-                Timber.d("Telnyx state changed: $telnyxState")
-                mergeStates(telnyxState, twilioService.state.value)
+            telnyxViewModel.uiState.collect { telnyxEvent ->
+                Timber.d("Telnyx event: $telnyxEvent")
+                mergeStates(telnyxEvent, twilioService.state.value)
             }
         }
     }
@@ -221,25 +278,97 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             twilioService.state.collect { twilioState ->
                 Timber.d("Twilio state changed: $twilioState")
-                mergeStates(telnyxService.state.value, twilioState)
+                mergeStates(telnyxViewModel.uiState.value, twilioState)
             }
         }
     }
 
-    private fun mergeStates(telnyxState: TelnyxCallState, twilioState: TwilioCallState) {
+    private fun mergeStates(telnyxEvent: TelnyxSocketEvent, twilioState: TwilioCallState) {
         // Priority: Active call > Incoming call > Ringing > Ready > Connecting > Idle
         // Only one call can be active at a time
 
         // Check for active calls first
-        if (telnyxState is TelnyxCallState.Active) {
-            val appCallInfo = mapTelnyxCallInfo(telnyxState.callInfo)
-            currentProvider = Provider.TELNYX
-            _callState.value = CallState.Active(appCallInfo, 0)
-            _callUIState.value = CallUIState.Active(appCallInfo)
-            _socketState.value = SocketConnectionState.READY
-            Timber.d("✅ CallViewModel: Telnyx call is ACTIVE, callId=${appCallInfo.callId}, remote=${appCallInfo.remoteNumber}")
-            startCallDurationTimer(appCallInfo)
-            return
+        if (telnyxEvent is TelnyxSocketEvent.OnCallAnswered) {
+            val currentCall = telnyxViewModel.currentCall
+            if (currentCall != null) {
+                val isIncomingCall = _callState.value is CallState.IncomingCall
+
+                // For outgoing calls, use stored destination. For incoming calls, use inviteResponse (caller info)
+                val remoteNumber = if (isIncomingCall) {
+                    currentCall.inviteResponse?.callerIdNumber ?: "Unknown"
+                } else {
+                    outboundDestination ?: "Unknown"
+                }
+                val remoteName = if (isIncomingCall) {
+                    currentCall.inviteResponse?.callerIdName ?: "Unknown"
+                } else {
+                    outboundDestination ?: "Unknown"
+                }
+
+                val appCallInfo = CallInfo(
+                    callId = currentCall.callId.toString(),
+                    provider = Provider.TELNYX,
+                    remoteNumber = remoteNumber,
+                    remoteName = remoteName,
+                    isIncoming = isIncomingCall,
+                    startTime = System.currentTimeMillis()
+                )
+                currentProvider = Provider.TELNYX
+                _callState.value = CallState.Active(appCallInfo, 0)
+                _callUIState.value = CallUIState.Active(appCallInfo)
+                _socketState.value = SocketConnectionState.READY
+                Timber.d("✅ CallViewModel: Telnyx call is ACTIVE (${if (isIncomingCall) "incoming" else "outgoing"}), callId=${appCallInfo.callId}, remote=${appCallInfo.remoteNumber}")
+                startCallDurationTimer(appCallInfo)
+                // Clear pending incoming call data and outbound destination once call is active
+                pendingIncomingCall = null
+                outboundDestination = null
+                return
+            }
+        }
+
+        if (telnyxEvent is TelnyxSocketEvent.OnMedia) {
+            val currentCall = telnyxViewModel.currentCall
+            if (currentCall != null) {
+                // Determine call direction from previous state
+                val isIncomingCall = _callState.value is CallState.IncomingCall
+                val isRinging = _callState.value is CallState.Ringing
+
+                // For outgoing calls, use stored destination. For incoming calls, use inviteResponse (caller info)
+                val remoteNumber = if (isIncomingCall) {
+                    currentCall.inviteResponse?.callerIdNumber ?: "Unknown"
+                } else if (isRinging) {
+                    // Was ringing (outbound), use destination
+                    outboundDestination ?: "Unknown"
+                } else {
+                    currentCall.inviteResponse?.callerIdNumber ?: "Unknown"
+                }
+                val remoteName = if (isIncomingCall) {
+                    currentCall.inviteResponse?.callerIdName ?: "Unknown"
+                } else if (isRinging) {
+                    outboundDestination ?: "Unknown"
+                } else {
+                    currentCall.inviteResponse?.callerIdName ?: "Unknown"
+                }
+
+                val appCallInfo = CallInfo(
+                    callId = currentCall.callId.toString(),
+                    provider = Provider.TELNYX,
+                    remoteNumber = remoteNumber,
+                    remoteName = remoteName,
+                    isIncoming = isIncomingCall,
+                    startTime = System.currentTimeMillis()
+                )
+                currentProvider = Provider.TELNYX
+                _callState.value = CallState.Active(appCallInfo, 0)
+                _callUIState.value = CallUIState.Active(appCallInfo)
+                _socketState.value = SocketConnectionState.READY
+                Timber.d("✅ CallViewModel: Telnyx call media connected (ACTIVE)")
+                startCallDurationTimer(appCallInfo)
+                // Clear pending incoming call data and outbound destination once call is active
+                pendingIncomingCall = null
+                outboundDestination = null
+                return
+            }
         }
 
         if (twilioState is TwilioCallState.Active) {
@@ -253,15 +382,26 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // Check for incoming calls
-        if (telnyxState is TelnyxCallState.IncomingCall) {
-            val appCallInfo = mapTelnyxCallInfo(telnyxState.callInfo)
+        if (telnyxEvent is TelnyxSocketEvent.OnIncomingCall) {
+            val message = telnyxEvent.message
+            Timber.d("📥 OnIncomingCall received: callId=${message.callId}, caller=${message.callerIdNumber}")
+            val appCallInfo = CallInfo(
+                callId = message.callId.toString(),
+                provider = Provider.TELNYX,
+                remoteNumber = message.callerIdNumber ?: "Unknown",
+                remoteName = message.callerIdName ?: "Unknown",
+                isIncoming = true,
+                startTime = System.currentTimeMillis()
+            )
             currentProvider = Provider.TELNYX
             incomingCallId = appCallInfo.callId
+            pendingIncomingCall = appCallInfo  // Store for answering call
             _callState.value = CallState.IncomingCall(appCallInfo)
             _callUIState.value = CallUIState.Incoming(appCallInfo)
             _socketState.value = SocketConnectionState.READY
             // Show notification for foreground incoming call
             showIncomingCallNotification(appCallInfo, Provider.TELNYX)
+            Timber.d("🔔 Incoming call notification shown for callId=${appCallInfo.callId}")
             return
         }
 
@@ -278,13 +418,25 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // Check for ringing (outbound)
-        if (telnyxState is TelnyxCallState.Ringing) {
-            val appCallInfo = mapTelnyxCallInfo(telnyxState.callInfo)
-            currentProvider = Provider.TELNYX
-            _callState.value = CallState.Ringing(appCallInfo)
-            _callUIState.value = CallUIState.Ringing(appCallInfo)
-            _socketState.value = SocketConnectionState.READY
-            return
+        if (telnyxEvent is TelnyxSocketEvent.OnRinging) {
+            val currentCall = telnyxViewModel.currentCall
+            if (currentCall != null) {
+                // Use the stored outbound destination instead of inviteResponse (which contains caller info, not destination)
+                val destination = outboundDestination ?: "Unknown"
+                val appCallInfo = CallInfo(
+                    callId = currentCall.callId.toString(),
+                    provider = Provider.TELNYX,
+                    remoteNumber = destination,
+                    remoteName = destination,
+                    isIncoming = false,
+                    startTime = System.currentTimeMillis()
+                )
+                currentProvider = Provider.TELNYX
+                _callState.value = CallState.Ringing(appCallInfo)
+                _callUIState.value = CallUIState.Ringing(appCallInfo)
+                _socketState.value = SocketConnectionState.READY
+                return
+            }
         }
 
         if (twilioState is TwilioCallState.Ringing) {
@@ -297,12 +449,6 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // Check for errors
-        if (telnyxState is TelnyxCallState.Error) {
-            _callState.value = CallState.Error(telnyxState.message, Provider.TELNYX)
-            _callUIState.value = CallUIState.Idle
-            return
-        }
-
         if (twilioState is TwilioCallState.Error) {
             _callState.value = CallState.Error(twilioState.message, Provider.TWILIO)
             _callUIState.value = CallUIState.Idle
@@ -311,7 +457,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
 
         // Check for ready state
         val readyProviders = mutableSetOf<Provider>()
-        if (telnyxState is TelnyxCallState.Ready) {
+        if (telnyxEvent is TelnyxSocketEvent.OnClientReady) {
             readyProviders.add(Provider.TELNYX)
         }
         if (twilioState is TwilioCallState.Registered) {
@@ -332,8 +478,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // Check for connecting/registering
-        if (telnyxState is TelnyxCallState.Connecting ||
-            twilioState is TwilioCallState.Registering) {
+        if (twilioState is TwilioCallState.Registering) {
             _callState.value = CallState.Registering
             _callUIState.value = CallUIState.Idle
             _socketState.value = SocketConnectionState.CONNECTING
@@ -344,17 +489,9 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
         _callState.value = CallState.Idle
         _callUIState.value = CallUIState.Idle
         _socketState.value = SocketConnectionState.DISCONNECTED
-    }
-
-    private fun mapTelnyxCallInfo(telnyxCallInfo: com.telnyx.voice.logic.models.CallInfo): CallInfo {
-        return CallInfo(
-            callId = telnyxCallInfo.callId,
-            provider = Provider.TELNYX,
-            remoteNumber = telnyxCallInfo.remoteNumber,
-            remoteName = telnyxCallInfo.remoteName,
-            isIncoming = telnyxCallInfo.isIncoming,
-            startTime = telnyxCallInfo.startTime
-        )
+        // Clear pending incoming call data and outbound destination when returning to idle
+        pendingIncomingCall = null
+        outboundDestination = null
     }
 
     private fun mapTwilioCallInfo(twilioCallInfo: com.twilio.voice.logic.models.CallInfo): CallInfo {

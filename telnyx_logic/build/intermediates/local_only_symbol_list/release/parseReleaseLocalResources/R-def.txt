@@ -1,5 +1,0 @@
-R_DEF: Internal format may change without notice
-local
-drawable ic_call_end_white
-drawable ic_call_white
-drawable ic_stat_contact_phone

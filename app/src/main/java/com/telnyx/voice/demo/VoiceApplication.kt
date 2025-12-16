@@ -1,16 +1,17 @@
 package com.telnyx.voice.demo
 
+import android.app.ActivityManager
 import android.app.Application
+import android.content.Context
+import android.os.Build
 import com.google.firebase.messaging.FirebaseMessaging
 import com.telnyx.voice.demo.util.SettingsStorage
-import com.telnyx.voice.logic.service.TelnyxService
 import com.twilio.voice.logic.service.TwilioService
 import timber.log.Timber
 
 class VoiceApplication : Application() {
 
-    lateinit var telnyxService: TelnyxService
-        private set
+    // Note: TelnyxViewModel is now managed by CallViewModel, not here
 
     lateinit var twilioService: TwilioService
         private set
@@ -24,14 +25,17 @@ class VoiceApplication : Application() {
         // Initialize Timber for logging
         Timber.plant(Timber.DebugTree())
 
-        // Initialize services
-        telnyxService = TelnyxService(this)
+        // Initialize Twilio service (Telnyx is managed by CallViewModel)
         twilioService = TwilioService(this)
 
-        // Fetch and log FCM token at launch
-        fetchFcmToken()
+        // Only fetch FCM token in main process, not in :call_service process
+        // Firebase is not initialized in the separate :call_service process where
+        // CallForegroundService runs
+        if (isMainProcess()) {
+            fetchFcmToken()
+        }
 
-        Timber.d("VoiceApplication initialized")
+        Timber.d("VoiceApplication initialized in process: ${getCurrentProcessName()}")
     }
 
     /**
@@ -91,6 +95,33 @@ class VoiceApplication : Application() {
             Timber.d("FCM TOKEN (copy this for push notifications):")
             Timber.d(token)
             Timber.d("═════════════════════════════════════════════════════════")
+        }
+    }
+
+    /**
+     * Checks if the current process is the main application process.
+     * Returns true for main process (e.g., "com.telnyx.voice.demo"),
+     * false for service processes (e.g., "com.telnyx.voice.demo:call_service")
+     */
+    private fun isMainProcess(): Boolean {
+        val processName = getCurrentProcessName()
+        return processName == packageName
+    }
+
+    /**
+     * Gets the name of the current process.
+     * Uses Application.getProcessName() on Android P+ (API 28+),
+     * falls back to ActivityManager for older versions.
+     */
+    private fun getCurrentProcessName(): String {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            Application.getProcessName()
+        } else {
+            // Fallback for older Android versions
+            val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            activityManager.runningAppProcesses?.find {
+                it.pid == android.os.Process.myPid()
+            }?.processName ?: packageName
         }
     }
 }

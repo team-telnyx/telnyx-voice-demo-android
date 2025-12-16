@@ -66,10 +66,8 @@ class MainActivity : ComponentActivity(), DefaultLifecycleObserver {
 
     override fun onStop(owner: LifecycleOwner) {
         super<DefaultLifecycleObserver>.onStop(owner)
-        // Disconnect when app goes to background so push notifications work
-        val app = application as VoiceApplication
-        app.telnyxService.disconnect()
-        Timber.d("MainActivity: Disconnected Telnyx on stop")
+        // Note: Disconnection is now handled by telnyx_common's lifecycle management
+        Timber.d("MainActivity: onStop")
     }
 
     private fun handleNotificationIntent(intent: Intent?) {
@@ -89,28 +87,12 @@ class MainActivity : ComponentActivity(), DefaultLifecycleObserver {
 
                 // Answer the call via ViewModel (only for ACT_ANSWER_CALL)
                 if (action == ACT_ANSWER_CALL) {
-                    val app = application as VoiceApplication
                     when (provider) {
                         "TELNYX" -> {
-                            if (pushMetadataJson != null) {
-                                // Restore push metadata to service (needed when app was terminated)
-                                try {
-                                    val pushMetadata = Gson().fromJson(pushMetadataJson, PushMetaData::class.java)
-                                    Timber.d("Restoring push metadata and answering call from push")
-                                    app.telnyxService.handlePushData(pushMetadata)
-                                    app.telnyxService.answerFromPush()
-                                } catch (e: Exception) {
-                                    Timber.e(e, "Error parsing push metadata")
-                                    // Fallback to regular answer
-                                    callViewModel.answerCall()
-                                }
-                            } else if (app.telnyxService.hasPendingPushMetadata()) {
-                                Timber.d("Answering Telnyx call from push (metadata already available)")
-                                app.telnyxService.answerFromPush()
-                            } else {
-                                Timber.d("Answering Telnyx call (socket already connected)")
-                                callViewModel.answerCall()
-                            }
+                            // Note: telnyx_common handles push notification auto-answer
+                            // Just call answerCall - the ViewModel will handle it
+                            Timber.d("Answering Telnyx call")
+                            callViewModel.answerCall()
                         }
                         "TWILIO" -> {
                             Timber.d("Answering Twilio call")

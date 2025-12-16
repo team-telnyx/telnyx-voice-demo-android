@@ -22,6 +22,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "Telnyx Voice Demo Android"
 include(":app")
-include(":telnyx_logic")
+include(":telnyx_common")
 include(":twilio_logic")
  
