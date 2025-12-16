@@ -64,31 +64,33 @@ class CallNotificationService(
      * Creates an incoming call notification with CallStyle support on Android 12+
      */
     fun createIncomingCallNotification(callInfo: CallInfo, provider: Provider): Notification {
-        // Create full-screen intent to launch app
-        val fullScreenIntent = Intent(context, MainActivity::class.java).apply {
+        // Create answer action - MUST use getActivity() directly to avoid Android 12+ trampoline restriction
+        val answerIntent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            action = CallActionReceiver.ACTION_ANSWER_CALL
-            putExtra(CallActionReceiver.EXTRA_CALL_ID, callInfo.callId)
-            putExtra(CallActionReceiver.EXTRA_PROVIDER, provider.name)
-            putExtra(CallActionReceiver.EXTRA_FROM_NOTIFICATION, true)
+            putExtra(MainActivity.ACTION_KEY, MainActivity.ACT_ANSWER_CALL)
+            putExtra(MainActivity.EXTRA_CALL_ID, callInfo.callId)
+            putExtra(MainActivity.EXTRA_PROVIDER, provider.name)
         }
-        val fullScreenPendingIntent = PendingIntent.getActivity(
-            context,
-            ANSWER_REQUEST_CODE,
-            fullScreenIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Create answer action
-        val answerIntent = Intent(context, receiverClass).apply {
-            action = CallActionReceiver.ACTION_ANSWER_CALL
-            putExtra(CallActionReceiver.EXTRA_CALL_ID, callInfo.callId)
-            putExtra(CallActionReceiver.EXTRA_PROVIDER, provider.name)
-        }
-        val answerPendingIntent = PendingIntent.getBroadcast(
+        val answerPendingIntent = PendingIntent.getActivity(
             context,
             ANSWER_REQUEST_CODE,
             answerIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Create full-screen intent for locked screen
+        val fullScreenIntent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.ACTION_KEY, MainActivity.ACT_OPEN_TO_REPLY)
+            putExtra(MainActivity.EXTRA_CALL_ID, callInfo.callId)
+            putExtra(MainActivity.EXTRA_PROVIDER, provider.name)
+        }
+        val fullScreenPendingIntent = PendingIntent.getActivity(
+            context,
+            ANSWER_REQUEST_CODE + 100,
+            fullScreenIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 

@@ -17,24 +17,11 @@ class CallActionReceiver : BroadcastReceiver() {
 
         when (intent.action) {
             ACTION_ANSWER_CALL -> {
-                // Provider is required for answer action
-                if (provider == null) {
-                    Timber.e("Provider is null for ACTION_ANSWER_CALL, cannot proceed")
-                    return
-                }
-
-                // Launch MainActivity with answer action
-                // MainActivity will handle connecting and answering the call
-                val launchIntent = Intent(context, MainActivity::class.java).apply {
-                    action = ACTION_ANSWER_CALL
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    putExtra(EXTRA_CALL_ID, callId)
-                    putExtra(EXTRA_PROVIDER, provider)
-                    putExtra(EXTRA_FROM_NOTIFICATION, true)
-                    pushMetadata?.let { putExtra(HybridFirebaseMessagingService.EXTRA_PUSH_METADATA, it) }
-                }
-                context.startActivity(launchIntent)
-                Timber.d("Launching MainActivity to answer call")
+                // REMOVED: Answer action is now handled directly by MainActivity
+                // to avoid Android 12+ trampoline restriction.
+                // The notification now uses PendingIntent.getActivity() to launch MainActivity directly.
+                Timber.w("Answer action received in BroadcastReceiver - this should not happen on Android 12+")
+                return
             }
             ACTION_DECLINE_CALL -> {
                 // Provider is required for decline action

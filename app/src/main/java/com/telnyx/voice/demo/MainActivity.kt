@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity(), DefaultLifecycleObserver {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)  // Important: update the intent
         // Handle intent when activity is already running
         handleNotificationIntent(intent)
     }
@@ -72,46 +73,61 @@ class MainActivity : ComponentActivity(), DefaultLifecycleObserver {
     }
 
     private fun handleNotificationIntent(intent: Intent?) {
-        if (intent?.action == CallActionReceiver.ACTION_ANSWER_CALL) {
-            val callId = intent.getStringExtra(CallActionReceiver.EXTRA_CALL_ID)
-            val provider = intent.getStringExtra(CallActionReceiver.EXTRA_PROVIDER)
-            val pushMetadataJson = intent.getStringExtra(HybridFirebaseMessagingService.EXTRA_PUSH_METADATA)
+        val action = intent?.getStringExtra(ACTION_KEY)
 
-            Timber.d("MainActivity: Handling answer intent - provider=$provider, callId=$callId, hasPushMetadata=${pushMetadataJson != null}")
+        when (action) {
+            ACT_ANSWER_CALL, ACT_OPEN_TO_REPLY -> {
+                val callId = intent.getStringExtra(EXTRA_CALL_ID)
+                val provider = intent.getStringExtra(EXTRA_PROVIDER)
+                val pushMetadataJson = intent.getStringExtra(EXTRA_PUSH_METADATA)
 
-            // Dismiss notification
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            callId?.let { notificationManager.cancel(it.hashCode()) }
+                Timber.d("MainActivity: Handling $action - provider=$provider, callId=$callId, hasPushMetadata=${pushMetadataJson != null}")
 
-            // Answer the call via ViewModel
-            val app = application as VoiceApplication
-            when (provider) {
-                "TELNYX" -> {
-                    if (pushMetadataJson != null) {
-                        // Restore push metadata to service (needed when app was terminated)
-                        try {
-                            val pushMetadata = Gson().fromJson(pushMetadataJson, PushMetaData::class.java)
-                            Timber.d("Restoring push metadata and answering call from push")
-                            app.telnyxService.handlePushData(pushMetadata)
-                            app.telnyxService.answerFromPush()
-                        } catch (e: Exception) {
-                            Timber.e(e, "Error parsing push metadata")
-                            // Fallback to regular answer
+                // Dismiss notification
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                callId?.let { notificationManager.cancel(it.hashCode()) }
+
+                // Answer the call via ViewModel (only for ACT_ANSWER_CALL)
+                if (action == ACT_ANSWER_CALL) {
+                    val app = application as VoiceApplication
+                    when (provider) {
+                        "TELNYX" -> {
+                            if (pushMetadataJson != null) {
+                                // Restore push metadata to service (needed when app was terminated)
+                                try {
+                                    val pushMetadata = Gson().fromJson(pushMetadataJson, PushMetaData::class.java)
+                                    Timber.d("Restoring push metadata and answering call from push")
+                                    app.telnyxService.handlePushData(pushMetadata)
+                                    app.telnyxService.answerFromPush()
+                                } catch (e: Exception) {
+                                    Timber.e(e, "Error parsing push metadata")
+                                    // Fallback to regular answer
+                                    callViewModel.answerCall()
+                                }
+                            } else if (app.telnyxService.hasPendingPushMetadata()) {
+                                Timber.d("Answering Telnyx call from push (metadata already available)")
+                                app.telnyxService.answerFromPush()
+                            } else {
+                                Timber.d("Answering Telnyx call (socket already connected)")
+                                callViewModel.answerCall()
+                            }
+                        }
+                        "TWILIO" -> {
+                            Timber.d("Answering Twilio call")
                             callViewModel.answerCall()
                         }
-                    } else if (app.telnyxService.hasPendingPushMetadata()) {
-                        Timber.d("Answering Telnyx call from push (metadata already available)")
-                        app.telnyxService.answerFromPush()
-                    } else {
-                        Timber.d("Answering Telnyx call (socket already connected)")
-                        callViewModel.answerCall()
                     }
-                }
-                "TWILIO" -> {
-                    Timber.d("Answering Twilio call")
-                    callViewModel.answerCall()
                 }
             }
         }
+    }
+
+    companion object {
+        const val ACTION_KEY = "ext_key_do_action"
+        const val ACT_ANSWER_CALL = "answer"
+        const val ACT_OPEN_TO_REPLY = "open_to_reply"
+        const val EXTRA_CALL_ID = "callId"
+        const val EXTRA_PROVIDER = "provider"
+        const val EXTRA_PUSH_METADATA = "pushMetadata"
     }
 }
