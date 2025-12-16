@@ -142,8 +142,8 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun handleTelnyxPush(metadata: PushMetaData) {
-        val app = application as VoiceApplication
-        app.telnyxService.handlePushData(metadata)
+        // Note: telnyx_common handles push notification flow automatically
+        // We just need to show the notification
 
         // Serialize metadata to JSON for passing through intent chain
         val metadataJson = Gson().toJson(metadata)
@@ -180,14 +180,16 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
     ) {
         createNotificationChannel()
 
-        // Answer intent
-        val answerIntent = Intent(this, CallActionReceiver::class.java).apply {
-            action = CallActionReceiver.ACTION_ANSWER_CALL
-            putExtra(CallActionReceiver.EXTRA_CALL_ID, callId)
-            putExtra(CallActionReceiver.EXTRA_PROVIDER, provider)
-            pushMetadata?.let { putExtra(EXTRA_PUSH_METADATA, it) }
+        // Answer intent - MUST use getActivity() directly to avoid Android 12+ trampoline restriction
+        val answerIntent = Intent(this, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.ACTION_KEY, MainActivity.ACT_ANSWER_CALL)
+            putExtra(MainActivity.EXTRA_CALL_ID, callId)
+            putExtra(MainActivity.EXTRA_PROVIDER, provider)
+            pushMetadata?.let { putExtra(MainActivity.EXTRA_PUSH_METADATA, it) }
         }
-        val answerPendingIntent = PendingIntent.getBroadcast(
+        val answerPendingIntent = PendingIntent.getActivity(
             this,
             callId.hashCode(),
             answerIntent,
@@ -207,10 +209,14 @@ class HybridFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Full screen intent
+        // Full screen intent for locked screen
         val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(CallActionReceiver.EXTRA_FROM_NOTIFICATION, true)
+            putExtra(MainActivity.ACTION_KEY, MainActivity.ACT_OPEN_TO_REPLY)
+            putExtra(MainActivity.EXTRA_CALL_ID, callId)
+            putExtra(MainActivity.EXTRA_PROVIDER, provider)
+            pushMetadata?.let { putExtra(MainActivity.EXTRA_PUSH_METADATA, it) }
         }
         val fullScreenPendingIntent = PendingIntent.getActivity(
             this,
