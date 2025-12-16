@@ -89,10 +89,19 @@ class MainActivity : ComponentActivity(), DefaultLifecycleObserver {
                 if (action == ACT_ANSWER_CALL) {
                     when (provider) {
                         "TELNYX" -> {
-                            // Note: telnyx_common handles push notification auto-answer
-                            // Just call answerCall - the ViewModel will handle it
-                            Timber.d("Answering Telnyx call")
-                            callViewModel.answerCall()
+                            if (pushMetadataJson != null) {
+                                // Cold-start push notification: use AnswerIncomingPushCall
+                                Timber.d("📲 Answering Telnyx PUSH call: callId=$callId, metadataPresent=true")
+                                callViewModel.telnyxViewModel.answerIncomingPushCall(
+                                    viewContext = this,
+                                    txPushMetaData = pushMetadataJson,
+                                    debug = false
+                                )
+                            } else {
+                                // Foreground call (socket already connected)
+                                Timber.d("📞 Answering Telnyx FOREGROUND call: callId=$callId")
+                                callViewModel.answerCall()
+                            }
                         }
                         "TWILIO" -> {
                             Timber.d("Answering Twilio call")

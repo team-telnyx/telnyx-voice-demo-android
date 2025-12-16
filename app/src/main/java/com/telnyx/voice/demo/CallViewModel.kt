@@ -31,7 +31,8 @@ import java.util.UUID
 class CallViewModel(application: Application) : AndroidViewModel(application) {
 
     // Use TelnyxViewModel from telnyx_common instead of custom TelnyxService
-    private val telnyxViewModel: TelnyxViewModel by lazy {
+    // Made public so MainActivity can access answerIncomingPushCall() for cold-start push notifications
+    val telnyxViewModel: TelnyxViewModel by lazy {
         ViewModelProvider.AndroidViewModelFactory.getInstance(application)
             .create(TelnyxViewModel::class.java)
     }
